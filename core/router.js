@@ -36,21 +36,21 @@ async function handleMessage(sock, sender, textMessage) {
         return;
     }
 
-    getRecentMemory(sender, async (history) => {
-        const promptMessages = [
-            { role: 'system', content: 'Anda adalah MJ, asisten AI WhatsApp untuk regional product distribution. Ramah, cerdas, dan membantu.' },
-            ...history,
-            { role: 'user', content: textMessage }
-        ];
+    // Mengambil history menggunakan await secara bersih tanpa callback ruwet
+    const history = await getRecentMemory(sender);
 
-        const aiReply = await getAIResponse(promptMessages);
+    const promptMessages = [
+        { role: 'system', content: 'Anda adalah MJ, asisten AI WhatsApp untuk regional product distribution. Ramah, cerdas, dan membantu.' },
+        ...history,
+        { role: 'user', content: textMessage }
+    ];
 
-        saveMemory(sender, 'user', textMessage);
-        saveMemory(sender, 'assistant', aiReply);
+    const aiReply = await getAIResponse(promptMessages);
 
-        await sock.sendMessage(sender, { text: aiReply });
-    });
+    saveMemory(sender, 'user', textMessage);
+    saveMemory(sender, 'assistant', aiReply);
+
+    await sock.sendMessage(sender, { text: aiReply });
 }
 
 module.exports = { handleMessage };
-                                        
