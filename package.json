@@ -1,7 +1,7 @@
 {
-  "name": "mj-bot-sqlite",
+  "name": "mj-bot-modular",
   "version": "1.0.0",
-  "description": "WhatsApp AI Bot MJ with SQLite Memory",
+  "description": "Modular WhatsApp AI Bot MJ",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -9,6 +9,7 @@
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.6.0",
+    "dotenv": "^16.4.5",
     "groq-sdk": "^0.3.0",
     "pino": "^8.16.2",
     "qrcode-terminal": "^0.12.0",
