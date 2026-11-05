@@ -1,32 +1,56 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { getAIResponse } = require('./ai');
+const { saveMemory, getRecentMemory } = require('./memory');
 
-const dbPath = path.resolve(__dirname, '../database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) console.error('Gagal konek SQLite:', err.message);
-    else console.log('Database SQLite terhubung.');
-});
+const catalogSkill = require('../skills/catalog');
+const stockSkill = require('../skills/stock');
+const transactionSkill = require('../skills/transaction');
+const analyticsSkill = require('../skills/analytics');
+const adminSkill = require('../skills/admin');
 
-db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS chat_memory (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sender TEXT,
-        role TEXT,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-});
+async function handleMessage(sock, sender, textMessage) {
+    const text = textMessage.toLowerCase();
 
-function saveMemory(sender, role, content) {
-    db.run(`INSERT INTO chat_memory (sender, role, content) VALUES (?, ?, ?)`, [sender, role, content]);
-}
+    if (text.startsWith('katalog') || text.includes('menu produk')) {
+        const reply = catalogSkill.execute();
+        await sock.sendMessage(sender, { text: reply });
+        return;
+    }
+    if (text.startsWith('stok') || text.includes('cek stok')) {
+        const reply = stockSkill.execute(text);
+        await sock.sendMessage(sender, { text: reply });
+        return;
+    }
+    if (text.startsWith('transaksi') || text.includes('beli')) {
+        const reply = transactionSkill.execute(text);
+        await sock.sendMessage(sender, { text: reply });
+        return;
+    }
+    if (text.startsWith('analytics') || text.startsWith('laporan')) {
+        const reply = analyticsSkill.execute();
+        await sock.sendMessage(sender, { text: reply });
+        return;
+    }
+    if (text.startsWith('admin') || text.startsWith('panel')) {
+        const reply = adminSkill.execute(sender);
+        await sock.sendMessage(sender, { text: reply });
+        return;
+    }
 
-function getRecentMemory(sender, callback) {
-    db.all(`SELECT role, content FROM chat_memory WHERE sender = ? ORDER BY id DESC LIMIT 10`, [sender], (err, rows) => {
-        if (err) callback([]);
-        else callback(rows.reverse());
+    getRecentMemory(sender, async (history) => {
+        const promptMessages = [
+            { role: 'system', content: 'Anda adalah MJ, asisten AI WhatsApp untuk regional product distribution. Ramah, cerdas, dan membantu.' },
+            ...history,
+            { role: 'user', content: textMessage }
+        ];
+
+        const aiReply = await getAIResponse(promptMessages);
+
+        saveMemory(sender, 'user', textMessage);
+        saveMemory(sender, 'assistant', aiReply);
+
+        await sock.sendMessage(sender, { text: aiReply });
     });
 }
 
-module.exports = { db, saveMemory, getRecentMemory };
-      
+module.exports = { handleMessage };
+                                        
