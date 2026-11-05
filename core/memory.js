@@ -21,12 +21,17 @@ function saveMemory(sender, role, content) {
     db.run(`INSERT INTO chat_memory (sender, role, content) VALUES (?, ?, ?)`, [sender, role, content]);
 }
 
-function getRecentMemory(sender, callback) {
-    db.all(`SELECT role, content FROM chat_memory WHERE sender = ? ORDER BY id DESC LIMIT 10`, [sender], (err, rows) => {
-        if (err) callback([]);
-        else callback(rows.reverse());
+// Diubah jadi Promise supaya sinkron dengan await di router
+function getRecentMemory(sender) {
+    return new Promise((resolve) => {
+        db.all(`SELECT role, content FROM chat_memory WHERE sender = ? ORDER BY id DESC LIMIT 10`, [sender], (err, rows) => {
+            if (err || !rows) {
+                resolve([]);
+            } else {
+                resolve(rows.reverse());
+            }
+        });
     });
 }
 
 module.exports = { db, saveMemory, getRecentMemory };
-      
