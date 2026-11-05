@@ -4,46 +4,56 @@ const { Boom } = require('@hapi/boom');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { Groq } = require('groq-sdk');
-const { createClient } = require('@supabase/supabase-js');
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
-// 2. INISIALISASI KONFIGURASI (GROQ & SUPABASE)
-// Mengambil API Key dari Environment Variables di Cloud Host
+// 2. INISIALISASI DATABASE SQLITE
+// File database akan otomatis terbuat dengan nama 'mj_memory.db' di server
+const dbPath = path.resolve(__dirname, 'mj_memory.db');
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error('Gagal terhubung ke SQLite:', err.message);
+    } else {
+        console.log('Berhasil terhubung ke database SQLite lokal.');
+    }
+});
+
+// Buat tabel memori chat jika belum ada
+db.run(`CREATE TABLE IF NOT EXISTS chat_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender TEXT,
+    role TEXT,
+    content TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+
+// 3. INISIALISASI API (GROQ)
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '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';
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-
 const groq = new Groq({ apiKey: GROQ_API_KEY });
-const supabase = (SUPABASE_URL && SUPABASE_KEY) ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// 3. FUNGSI MANAJEMEN MEMORI CHAT (SUPABASE)
-async function saveMemory(sender, role, content) {
-    if (!supabase) return;
-    try {
-        await supabase.from('chat_memory').insert([{ sender, role, content }]);
-    } catch (err) {
-        console.error('Gagal menyimpan memori ke Supabase:', err);
-    }
+// 4. FUNGSI MANAJEMEN MEMORI (SQLITE)
+function saveMemory(sender, role, content) {
+    const query = `INSERT INTO chat_memory (sender, role, content) VALUES (?, ?, ?)`;
+    db.run(query, [sender, role, content], (err) => {
+        if (err) console.error('Gagal menyimpan memori:', err.message);
+    });
 }
 
-async function getRecentMemory(sender) {
-    if (!supabase) return [];
-    try {
-        const { data, error } = await supabase
-            .from('chat_memory')
-            .select('role, content')
-            .eq('sender', sender)
-            .order('created_at', { ascending: false })
-            .limit(10);
-
-        if (error || !data) return [];
-        return data.reverse();
-    } catch (err) {
-        console.error('Gagal mengambil memori dari Supabase:', err);
-        return [];
-    }
+function getRecentMemory(sender, callback) {
+    // Ambil 10 percakapan terakhir untuk pengirim tertentu
+    const query = `SELECT role, content FROM chat_memory WHERE sender = ? ORDER BY id DESC LIMIT 10`;
+    db.all(query, [sender], (err, rows) => {
+        if (err) {
+            console.error('Gagal mengambil memori:', err.message);
+            callback([]);
+        } else {
+            // Balikkan urutannya agar kronologinya sesuai (lama ke baru)
+            callback(rows.reverse());
+        }
+    });
 }
 
-// 4. FUNGSI UTAMA BOT
+// 5. FUNGSI UTAMA BOT WHATSAPP
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version } = await fetchLatestBaileysVersion();
@@ -70,11 +80,11 @@ async function startBot() {
             console.log('Koneksi terputus. Menghubungkan ulang:', shouldReconnect);
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
-            console.log('Bot WhatsApp MJ Cloud Edition Berhasil Terhubung!');
+            console.log('Bot WhatsApp MJ (SQLite Edition) Berhasil Terhubung!');
         }
     });
 
-    // 5. HANDLER PESAN MASUK
+    // 6. HANDLER PESAN MASUK
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         const msg = messages[0];
@@ -88,38 +98,37 @@ async function startBot() {
 
         console.log(`Pesan dari ${sender}: ${textMessage}`);
 
-        try {
-            // Ambil riwayat chat terdahulu dari Supabase
-            const history = await getRecentMemory(sender);
+        // Ambil riwayat memori dari SQLite
+        getRecentMemory(sender, async (history) => {
+            try {
+                // Susun prompt untuk Groq AI
+                const promptMessages = [
+                    { role: 'system', content: 'Anda adalah MJ, asisten AI WhatsApp yang responsif, cerdas, dan ramah. Gunakan riwayat percakapan sebelumnya jika relevan untuk menjawab.' },
+                    ...history,
+                    { role: 'user', content: textMessage }
+                ];
 
-            // Susun prompt pesan untuk Groq AI
-            const promptMessages = [
-                { role: 'system', content: 'Anda adalah MJ, asisten AI WhatsApp yang responsif, cerdas, dan ramah. Gunakan riwayat percakapan sebelumnya jika relevan untuk menjawab.' },
-                ...history,
-                { role: 'user', content: textMessage }
-            ];
+                // Kirim ke Groq AI
+                const chatCompletion = await groq.chat.completions.create({
+                    messages: promptMessages,
+                    model: 'openai/gpt-oss-20b',
+                });
 
-            // Kirim ke Groq API (gpt-oss-20b)
-            const chatCompletion = await groq.chat.completions.create({
-                messages: promptMessages,
-                model: 'openai/gpt-oss-20b',
-            });
+                const replyText = chatCompletion.choices[0]?.message?.content || 'Maaf, tidak ada respons dari model.';
 
-            const replyText = chatCompletion.choices[0]?.message?.content || 'Maaf, tidak ada respons dari model.';
+                // Simpan percakapan baru ke SQLite
+                saveMemory(sender, 'user', textMessage);
+                saveMemory(sender, 'assistant', replyText);
 
-            // Simpan percakapan ke Supabase
-            await saveMemory(sender, 'user', textMessage);
-            await saveMemory(sender, 'assistant', replyText);
+                // Kirim balasan ke WhatsApp
+                await sock.sendMessage(sender, { text: replyText });
 
-            // Balas ke WhatsApp
-            await sock.sendMessage(sender, { text: replyText });
-
-        } catch (error) {
-            console.error('Error pada proses bot/Groq:', error);
-            await sock.sendMessage(sender, { text: 'Terjadi kesalahan saat memproses pesan.' });
-        }
+            } catch (error) {
+                console.error('Error pada proses bot/Groq:', error);
+                await sock.sendMessage(sender, { text: 'Terjadi kesalahan saat memproses pesan.' });
+            }
+        });
     });
 }
 
 startBot();
-      
