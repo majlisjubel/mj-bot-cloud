@@ -11,39 +11,27 @@ function searchCandidates(query) {
     const data = JSON.parse(rawData);
     
     const rawQuery = query.toLowerCase().trim();
-    const stopwords = ['mj', 'cari', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah', 'tolong'];
     
-    const keywords = rawQuery
-      .split(/\s+/)
-      .filter(word => word.length > 1 && !stopwords.includes(word));
+    // Ambil pola angka atau nominal harga dari query (misal: '80k', '90k', '50000', dll)
+    const priceMatch = rawQuery.match(/(\d+k|\d+rb|\d{4,})/g);
+    
+    if (!priceMatch) {
+      // Jika user tidak menyebutkan nominal harga, kembalikan kosong atau saring kata penting
+      return [];
+    }
 
-    console.log('[DEBUG MARKET] Keyword bersih:', keywords);
+    console.log('[DEBUG MARKET] Target Harga/Nominal yang dicari:', priceMatch);
 
-    if (keywords.length === 0) return data.slice(0, 5); // Default ambil 5 teratas jika keyword kosong
-
-    // Berikan sistem skor pencocokan (relevance scoring)
-    const scoredResults = data.map(item => {
-      const targetString = `${item.nama_produk || ''} ${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
+    // Filter data yang di dalam harganya atau deskripsinya mengandung nominal tersebut
+    const results = data.filter(item => {
+      const targetString = `${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
       
-      let score = 0;
-      keywords.forEach(kw => {
-        if (targetString.includes(kw)) {
-          score += 1; // Tambah poin setiap keyword yang cocok
-        }
-      });
-
-      return { item, score };
+      // Pastikan item mengandung minimal salah satu nominal harga yang dicari
+      return priceMatch.some(priceKw => targetString.includes(priceKw));
     });
 
-    // Ambil item yang memiliki skor kecocokan minimal 1 (artinya ada keyword yang nyambung)
-    // Urutkan dari skor yang paling tinggi ke rendah
-    const matched = scoredResults
-      .filter(res => res.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(res => res.item);
-
-    console.log(`[DEBUG MARKET] Hasil filter dengan skor: ${matched.length} item`);
-    return matched;
+    console.log(`[DEBUG MARKET] Hasil filter harga: ${results.length} item`);
+    return results;
   } catch (error) {
     console.error("[MARKET SEARCH ERROR]:", error.message);
     return [];
