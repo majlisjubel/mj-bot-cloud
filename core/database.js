@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const filePath = path.join(__dirname, '../data/candidates.json');
+// Ubah arah path langsung ke root folder utama project
+const filePath = path.join(__dirname, '../candidates.json');
 
 function initStorage() {
     const dir = path.dirname(filePath);
@@ -42,4 +43,3 @@ function saveCandidate(productData) {
 }
 
 module.exports = { getCandidates, saveCandidate };
-  
