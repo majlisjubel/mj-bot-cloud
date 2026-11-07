@@ -44,7 +44,10 @@ async function startBot() {
 
         const sender = msg.key.remoteJid;
 
-        // PERUBAHAN DI SINI: Menambahkan pengecekan caption gambar/video agar pesan produk bergambar ikut terbaca
+        // 1. Cek apakah pesan berupa gambar (imageMessage)
+        const isImage = !!msg.message.imageMessage;
+
+        // 2. Ambil teks dari conversation, extended text, atau caption gambar/video
         const textMessage = 
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
@@ -52,17 +55,18 @@ async function startBot() {
             msg.message.videoMessage?.caption ||
             '';
 
-        if (!textMessage) return;
+        // Jika tidak ada teks DAN bukan gambar, abaikan
+        if (!textMessage && !isImage) return;
 
         // Cek apakah bot di-mention di dalam grup
         const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
         const mentionedJids = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
         const isMentioned = mentionedJids.includes(botNumber);
 
-        console.log(`Pesan dari ${sender} (Mentioned: ${isMentioned}): ${textMessage}`);
+        console.log(`Pesan dari ${sender} (Image: ${isImage}, Mentioned: ${isMentioned}): ${textMessage || '[Media Gambar]'}`);
         
-        // Kirim status isMentioned ke router.js
-        await handleMessage(sock, sender, textMessage, isMentioned);
+        // Kirim parameter isImage ke router.js
+        await handleMessage(sock, sender, textMessage, isMentioned, isImage);
     });
 }
 
