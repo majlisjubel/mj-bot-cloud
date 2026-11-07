@@ -47,8 +47,15 @@ async function startBot() {
 
         if (!textMessage) return;
 
-        console.log(`Pesan dari ${sender}: ${textMessage}`);
-        await handleMessage(sock, sender, textMessage);
+        // Cek apakah bot di-mention di dalam grup
+        const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+        const mentionedJids = msg.message.extendedTextMessage?.contextInfo?.mentionedJid || [];
+        const isMentioned = mentionedJids.includes(botNumber);
+
+        console.log(`Pesan dari ${sender} (Mentioned: ${isMentioned}): ${textMessage}`);
+        
+        // Kirim status isMentioned ke router.js
+        await handleMessage(sock, sender, textMessage, isMentioned);
     });
 }
 
