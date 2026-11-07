@@ -11,7 +11,7 @@ const adminSkill = require('../skills/admin');
 const { extractProductData } = require('../skills/productIntelligence');
 const { saveCandidate } = require('./database'); // sesuaikan path jika file database.js ada di folder core/
 
-async function handleMessage(sock, sender, textMessage, isMentioned = false) {
+async function handleMessage(sock, sender, textMessage, isMentioned = false, isImage = false) {
     const text = textMessage.toLowerCase();
     const isGroup = sender.endsWith('@g.us');
 
@@ -35,13 +35,34 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false) {
             saveMemory(sender, 'assistant', aiReply);
             await sock.sendMessage(sender, { text: aiReply });
             return;
-        } else {
-            // Jika di grup, tidak pakai '!' dan tidak di-mention -> ABAIKAN (bot diam)
+        } else if (!isImage) {
+            // Jika di grup, bukan perintah, bukan mention, dan BUKAN GAMBAR -> ABAIKAN
             return;
         }
     }
 
-    // 1. Cek Command Utama (Skills) menggunakan cleanText yang sudah disaring
+    // 2. JIKA PESAN BERUPA GAMBAR (Dengan atau tanpa caption), OTOMATIS MASUK KANDIDAT PRODUK
+    if (isImage) {
+        console.log('-> [ROUTER] Terdeteksi pesan gambar dagangan. Memproses ke Product Intelligence...');
+        
+        // Jalankan ekstraksi Groq AI menggunakan caption (atau teks default jika polos)
+        const analysis = await extractProductData(textMessage || "Produk Gambar Tanpa Keterangan", sender);
+
+        const productData = {
+            nama_produk: analysis?.nama_produk || "Akun / Item Game (Lampiran Gambar)",
+            harga: analysis?.harga || "Cek Caption/Gambar",
+            deskripsi: textMessage || "Gambar produk dagangan dari member",
+            penjual: sender
+        };
+
+        const savedItem = saveCandidate(productData);
+        console.log('-> [SUCCESS] Kandidat produk gambar tersimpan:', savedItem.nama_produk);
+        
+        await sock.sendMessage(sender, { text: `✅ Produk gambar terdeteksi & masuk antrean kandidat: *${savedItem.nama_produk}*` });
+        return;
+    }
+
+    // 3. Cek Command Utama (Skills) menggunakan cleanText yang sudah disaring
     if (cleanText.includes('katalog') || cleanText.includes('catalog') || cleanText.includes('menu produk')) {
         const reply = catalogSkill.execute();
         await sock.sendMessage(sender, { text: reply });
@@ -68,23 +89,18 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false) {
         return;
     }
 
-    // 2. Integrasi Filter Produk & Product Intelligence (Project 6) - DIPERLUAS AGAR LEBIH FLEKSIBEL
+    // 4. Integrasi Filter Produk & Product Intelligence (Project 6) - Cadangan teks biasa
     const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
-    // Memperluas intent agar kata-kata gaul/bebas (seperti akun, ml, ff, di, allkosin, dll) ikut tertangkap
     const hasIntent = /(jual|ready|mahar|allkosin|bisa|akun|ml|ff|di|caw)/i.test(textMessage) || hasPrice;
 
     if (hasPrice && hasIntent) {
         console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran. Menjalankan AI Extraction...');
         
-        // Jalankan ekstraksi Groq AI
         const analysis = await extractProductData(textMessage, sender);
 
         if (analysis && analysis.isValidProduct) {
-            // Simpan otomatis ke kandidat lokal (aman tanpa sqlite native)
             const savedItem = saveCandidate(analysis);
             console.log('-> [SUCCESS] Kandidat produk tersimpan:', savedItem.nama_produk);
-            
-            // Berikan respons opsional (bisa dikondisikan agar bot tidak terlalu spam di grup)
             await sock.sendMessage(sender, { text: `✅ Produk terdeteksi & masuk antrean kandidat: *${savedItem.nama_produk}* (Rp ${savedItem.harga})` });
         } else {
             console.log('-> [INFO] Filter keyword cocok, tapi AI menyatakan bukan produk valid.');
@@ -92,7 +108,7 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false) {
         return;
     }
 
-    // 3. Jalur Default: Lempar ke Groq AI untuk Chat Biasa & Memori (Hanya berlaku di DM atau jika di-mention)
+    // 5. Jalur Default: Lempar ke Groq AI untuk Chat Biasa & Memori (Hanya berlaku di DM atau jika di-mention)
     const history = await getRecentMemory(sender);
 
     const promptMessages = [
