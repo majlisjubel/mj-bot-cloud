@@ -10,6 +10,7 @@ const adminSkill = require('../skills/admin');
 async function handleMessage(sock, sender, textMessage) {
     const text = textMessage.toLowerCase();
 
+    // 1. Cek Command Utama (Skills)
     if (text.startsWith('katalog') || text.includes('menu produk')) {
         const reply = catalogSkill.execute();
         await sock.sendMessage(sender, { text: reply });
@@ -36,7 +37,18 @@ async function handleMessage(sock, sender, textMessage) {
         return;
     }
 
-    // Mengambil history menggunakan await secara bersih tanpa callback ruwet
+    // 2. Integrasi Filter Produk (Project 5 yang baru kita uji)
+    const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
+    const hasIntent = /(jual|ready|mahar)\s+(akun|ml|ff)/i.test(textMessage) || /^(jual|ready|mahar)/i.test(textMessage);
+
+    if (hasPrice && hasIntent) {
+        console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran.');
+        // Di sini nanti bisa diarahkan ke fungsi ekstraksi produk atau dibalas otomatis
+        await sock.sendMessage(sender, { text: 'Bot mendeteksi penawaran produk. Sedang diproses...' });
+        return;
+    }
+
+    // 3. Jalur Default: Lempar ke Groq AI untuk Chat Biasa & Memori
     const history = await getRecentMemory(sender);
 
     const promptMessages = [
