@@ -12,61 +12,58 @@ function searchCandidates(query) {
     
     const rawQuery = query.toLowerCase().trim();
     
-    // 1. Tangkap pola harga/nominal (misal: '80k', '90k', dll)
+    // 1. Tangkap pola harga (misal: 80k, 90k, dst)
     const priceMatches = rawQuery.match(/(\d+k|\d+rb|\d{4,})/g) || [];
-    console.log('[DEBUG MARKET] Harga terdeteksi:', priceMatches);
 
-    // 2. Daftar stopwords (kata buangan) agar tidak ikut dihitung sebagai keyword teks
-    const stopwords = ['mj', 'cari', 'cariin', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah', 'tolong', 'akun'];
-    
-    // 3. Ambil sisa kata sebagai keyword tambahan (misal: 'allkos', 'minus', 'plat')
-    const textKeywords = rawQuery
-      .split(/\s+/)
-      .filter(word => word.length > 1 && !stopwords.includes(word) && !/(\d+k|\d+rb|\d{4,})/.test(word));
-    
-    console.log('[DEBUG MARKET] Keyword teks tambahan:', textKeywords);
+    // 2. Daftar keyword kategori yang diizinkan (Game, Kondisi, Spesifikasi)
+    const allowedKeywords = ['ml', 'ff', 'mobile legend', 'free fire', 'allkos', 'minus plat', 'kgm', 'free ce'];
 
-    // Jika tidak ada harga sama sekali dan tidak ada keyword teks, hentikan pencarian
-    if (priceMatches.length === 0 && textKeywords.length === 0) return [];
+    // Cari keyword apa saja dari daftar di atas yang disebut oleh user dalam query
+    const detectedKeywords = allowedKeywords.filter(kw => rawQuery.includes(kw));
 
-    // Berikan sistem skor penilaian kecocokan data
+    console.log('[DEBUG MARKET] Harga:', priceMatches, '| Keyword Kategori:', detectedKeywords);
+
+    // Jika user tidak memasukkan harga DAN tidak memasukkan keyword kategori yang valid, tolak! (Supaya gak nyari janda/ngawur)
+    if (priceMatches.length === 0 && detectedKeywords.length === 0) {
+      return [];
+    }
+
+    // 3. Sistem Pencocokan & Penilaian Skor
     const scoredResults = data.map(item => {
       const targetString = `${item.nama_produk || ''} ${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
       
       let score = 0;
-      let priceMatched = false;
+      let matchCount = 0;
 
-      // Cek kecocokan harga (Bobot nilai besar jika harga cocok)
+      // Cek kecocokan harga
       if (priceMatches.length > 0) {
         const hasPrice = priceMatches.some(p => targetString.includes(p));
         if (hasPrice) {
-          score += 10; // Poin tinggi untuk kecocokan harga
-          priceMatched = true;
+          score += 10;
         } else {
-          // Jika user spesifik nyari harga tertentu tapi di item ini harganya beda, berikan penalti/skor 0
-          score -= 5;
+          score -= 5; // Penalti jika harga tidak sesuai
         }
-      } else {
-        priceMatched = true; // Jika user tidak nyari harga spesifik, anggap lolos
       }
 
-      // Cek kecocokan keyword tambahan (allkos, minus plat, dll)
-      textKeywords.forEach(kw => {
+      // Cek kecocokan keyword kategori (ml, ff, allkos, kgm, dll)
+      // Meskipun user cuma ketik salah satu, tetap dihitung dan diberi skor!
+      detectedKeywords.forEach(kw => {
         if (targetString.includes(kw)) {
-          score += 5; // Tambah poin bonus untuk tiap keyword teks yang cocok
+          score += 5;
+          matchCount += 1;
         }
       });
 
-      return { item, score, priceMatched };
+      return { item, score, matchCount };
     });
 
-    // Filter hanya ambil yang skornya positif dan memenuhi syarat harga (jika harga disertakan)
+    // Filter: Ambil item yang skornya positif dan memiliki minimal kecocokan yang valid
     const finalResults = scoredResults
-      .filter(res => res.score > 0 && (priceMatches.length === 0 || res.priceMatched))
-      .sort((a, b) => b.score - a.score) // Urutkan dari skor tertinggi
+      .filter(res => res.score > 0 && (detectedKeywords.length === 0 || res.matchCount > 0 || priceMatches.length > 0))
+      .sort((a, b) => b.score - a.score)
       .map(res => res.item);
 
-    console.log(`[DEBUG MARKET] Hasil filter kombinasi: ${finalResults.length} item`);
+    console.log(`[DEBUG MARKET] Hasil filter kategori: ${finalResults.length} item`);
     return finalResults;
   } catch (error) {
     console.error("[MARKET SEARCH ERROR]:", error.message);
