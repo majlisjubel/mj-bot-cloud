@@ -11,29 +11,39 @@ function searchCandidates(query) {
     const data = JSON.parse(rawData);
     
     const rawQuery = query.toLowerCase().trim();
+    const stopwords = ['mj', 'cari', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah', 'tolong'];
     
-    // Daftar kata umum yang harus dibuang dari keyword pencarian
-    const stopwords = ['mj', 'cari', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah'];
-    
-    // Pecah query dan saring hanya kata kunci inti (misal: '80k', 'ml', 'ff')
     const keywords = rawQuery
       .split(/\s+/)
       .filter(word => word.length > 1 && !stopwords.includes(word));
 
     console.log('[DEBUG MARKET] Keyword bersih:', keywords);
 
-    // Jika setelah disaring malah kosong total, kembalikan array kosong
-    if (keywords.length === 0) return [];
+    if (keywords.length === 0) return data.slice(0, 5); // Default ambil 5 teratas jika keyword kosong
 
-    const results = data.filter(item => {
+    // Berikan sistem skor pencocokan (relevance scoring)
+    const scoredResults = data.map(item => {
       const targetString = `${item.nama_produk || ''} ${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
       
-      // Syarat: Item harus mengandung SEMUA keyword inti yang dicari (biar spesifik dan akurat)
-      return keywords.every(kw => targetString.includes(kw));
+      let score = 0;
+      keywords.forEach(kw => {
+        if (targetString.includes(kw)) {
+          score += 1; // Tambah poin setiap keyword yang cocok
+        }
+      });
+
+      return { item, score };
     });
 
-    console.log(`[DEBUG MARKET] Hasil filter spesifik: ${results.length} item`);
-    return results;
+    // Ambil item yang memiliki skor kecocokan minimal 1 (artinya ada keyword yang nyambung)
+    // Urutkan dari skor yang paling tinggi ke rendah
+    const matched = scoredResults
+      .filter(res => res.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(res => res.item);
+
+    console.log(`[DEBUG MARKET] Hasil filter dengan skor: ${matched.length} item`);
+    return matched;
   } catch (error) {
     console.error("[MARKET SEARCH ERROR]:", error.message);
     return [];
