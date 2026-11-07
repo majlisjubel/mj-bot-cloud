@@ -7,9 +7,10 @@ const transactionSkill = require('../skills/transaction');
 const analyticsSkill = require('../skills/analytics');
 const adminSkill = require('../skills/admin');
 
-// 1. Tambahkan import Product Intelligence & Database Kandidat
+// 1. Import Product Intelligence & Market Search
 const { extractProductData } = require('../skills/productIntelligence');
-const { saveCandidate } = require('./database'); // sesuaikan path jika file database.js ada di folder core/
+const { searchCandidates } = require('../skills/marketSearch'); // Modul pencarian kandidat baru
+const { saveCandidate } = require('./database');
 
 async function handleMessage(sock, sender, textMessage, isMentioned = false, isImage = false) {
     const text = textMessage.toLowerCase();
@@ -45,7 +46,6 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false, isI
     if (isImage) {
         console.log('-> [ROUTER] Terdeteksi pesan gambar dagangan. Memproses ke Product Intelligence...');
         
-        // Jalankan ekstraksi Groq AI menggunakan caption (atau teks default jika polos)
         const analysis = await extractProductData(textMessage || "Produk Gambar Tanpa Keterangan", sender);
 
         const productData = {
@@ -89,7 +89,31 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false, isI
         return;
     }
 
-    // 4. Integrasi Filter Produk & Product Intelligence (Project 6) - Cadangan teks biasa
+    // 4. FITUR BARU: MARKET SEARCH (Mencari data seller lain di candidates.json)
+    // Berfungsi ketika ada yang mengetik kata kunci pencarian barang (misal: "cari akun", "ada ml", "jual ff")
+    const isSearchQuery = /(cari|nyari|ada yang jual|info|ready stok|slot|cek)/i.test(cleanText);
+    if (isSearchQuery) {
+        console.log('-> [ROUTER] Terdeteksi niat mencari barang pasar. Memindai candidates.json...');
+        const searchResults = searchCandidates(cleanText);
+
+        if (searchResults.length > 0) {
+            let responseText = "🔍 **Ketemu nih, cuy! Berdasarkan data pasar di grup:**\n\n";
+            
+            searchResults.slice(0, 5).forEach((item, index) => {
+                responseText += `${index + 1}. *${item.nama_produk || 'Item'}*\n`;
+                responseText += `   💰 Harga: ${item.harga}\n`;
+                responseText += `   📝 Info: ${item.deskripsi}\n`;
+                responseText += `   👤 Penjual: @${item.penjual ? item.penjual.split('@')[0] : 'Seller'}\n\n`;
+            });
+
+            responseText += "Silakan hubungi sellernya langsung ya!";
+            await sock.sendMessage(sender, { text: responseText });
+            return;
+        }
+        // Jika tidak ketemu di candidates, biarkan lanjut ke bawah (bisa ke katalog utama atau AI chat)
+    }
+
+    // 5. Integrasi Filter Produk & Product Intelligence (Cadangan teks biasa penawaran seller)
     const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
     const hasIntent = /(jual|ready|mahar|allkosin|bisa|akun|ml|ff|di|caw)/i.test(textMessage) || hasPrice;
 
@@ -108,7 +132,7 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false, isI
         return;
     }
 
-    // 5. Jalur Default: Lempar ke Groq AI untuk Chat Biasa & Memori (Hanya berlaku di DM atau jika di-mention)
+    // 6. Jalur Default: Lempar ke Groq AI untuk Chat Biasa & Memori (Hanya berlaku di DM atau jika di-mention)
     const history = await getRecentMemory(sender);
 
     const promptMessages = [
