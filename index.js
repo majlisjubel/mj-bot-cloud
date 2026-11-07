@@ -43,7 +43,14 @@ async function startBot() {
         if (!msg.message || msg.key.fromMe) return;
 
         const sender = msg.key.remoteJid;
-        const textMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+        // PERUBAHAN DI SINI: Menambahkan pengecekan caption gambar/video agar pesan produk bergambar ikut terbaca
+        const textMessage = 
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            msg.message.videoMessage?.caption ||
+            '';
 
         if (!textMessage) return;
 
