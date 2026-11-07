@@ -12,26 +12,62 @@ function searchCandidates(query) {
     
     const rawQuery = query.toLowerCase().trim();
     
-    // Ambil pola angka atau nominal harga dari query (misal: '80k', '90k', '50000', dll)
-    const priceMatch = rawQuery.match(/(\d+k|\d+rb|\d{4,})/g);
+    // 1. Tangkap pola harga/nominal (misal: '80k', '90k', dll)
+    const priceMatches = rawQuery.match(/(\d+k|\d+rb|\d{4,})/g) || [];
+    console.log('[DEBUG MARKET] Harga terdeteksi:', priceMatches);
+
+    // 2. Daftar stopwords (kata buangan) agar tidak ikut dihitung sebagai keyword teks
+    const stopwords = ['mj', 'cari', 'cariin', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah', 'tolong', 'akun'];
     
-    if (!priceMatch) {
-      // Jika user tidak menyebutkan nominal harga, kembalikan kosong atau saring kata penting
-      return [];
-    }
+    // 3. Ambil sisa kata sebagai keyword tambahan (misal: 'allkos', 'minus', 'plat')
+    const textKeywords = rawQuery
+      .split(/\s+/)
+      .filter(word => word.length > 1 && !stopwords.includes(word) && !/(\d+k|\d+rb|\d{4,})/.test(word));
+    
+    console.log('[DEBUG MARKET] Keyword teks tambahan:', textKeywords);
 
-    console.log('[DEBUG MARKET] Target Harga/Nominal yang dicari:', priceMatch);
+    // Jika tidak ada harga sama sekali dan tidak ada keyword teks, hentikan pencarian
+    if (priceMatches.length === 0 && textKeywords.length === 0) return [];
 
-    // Filter data yang di dalam harganya atau deskripsinya mengandung nominal tersebut
-    const results = data.filter(item => {
-      const targetString = `${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
+    // Berikan sistem skor penilaian kecocokan data
+    const scoredResults = data.map(item => {
+      const targetString = `${item.nama_produk || ''} ${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
       
-      // Pastikan item mengandung minimal salah satu nominal harga yang dicari
-      return priceMatch.some(priceKw => targetString.includes(priceKw));
+      let score = 0;
+      let priceMatched = false;
+
+      // Cek kecocokan harga (Bobot nilai besar jika harga cocok)
+      if (priceMatches.length > 0) {
+        const hasPrice = priceMatches.some(p => targetString.includes(p));
+        if (hasPrice) {
+          score += 10; // Poin tinggi untuk kecocokan harga
+          priceMatched = true;
+        } else {
+          // Jika user spesifik nyari harga tertentu tapi di item ini harganya beda, berikan penalti/skor 0
+          score -= 5;
+        }
+      } else {
+        priceMatched = true; // Jika user tidak nyari harga spesifik, anggap lolos
+      }
+
+      // Cek kecocokan keyword tambahan (allkos, minus plat, dll)
+      textKeywords.forEach(kw => {
+        if (targetString.includes(kw)) {
+          score += 5; // Tambah poin bonus untuk tiap keyword teks yang cocok
+        }
+      });
+
+      return { item, score, priceMatched };
     });
 
-    console.log(`[DEBUG MARKET] Hasil filter harga: ${results.length} item`);
-    return results;
+    // Filter hanya ambil yang skornya positif dan memenuhi syarat harga (jika harga disertakan)
+    const finalResults = scoredResults
+      .filter(res => res.score > 0 && (priceMatches.length === 0 || res.priceMatched))
+      .sort((a, b) => b.score - a.score) // Urutkan dari skor tertinggi
+      .map(res => res.item);
+
+    console.log(`[DEBUG MARKET] Hasil filter kombinasi: ${finalResults.length} item`);
+    return finalResults;
   } catch (error) {
     console.error("[MARKET SEARCH ERROR]:", error.message);
     return [];
