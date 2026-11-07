@@ -1,6 +1,8 @@
-const fs = fse = require('fs');
+const fs = require('fs');
 const path = require('path');
-const CANDIDATES_FILE = path.join(__dirname, '../candidates.json'); // Sesuaikan path jika di dalam folder skills
+
+// Path presisi: naik satu tingkat dari folder skills/ ke root project utama
+const CANDIDATES_FILE = path.join(__dirname, '../candidates.json');
 
 function searchCandidates(query) {
   if (!fs.existsSync(CANDIDATES_FILE)) return [];
@@ -24,4 +26,3 @@ function searchCandidates(query) {
 }
 
 module.exports = { searchCandidates };
-    
