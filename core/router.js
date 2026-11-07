@@ -68,9 +68,10 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false) {
         return;
     }
 
-    // 2. Integrasi Filter Produk & Product Intelligence (Project 6)
+    // 2. Integrasi Filter Produk & Product Intelligence (Project 6) - DIPERLUAS AGAR LEBIH FLEKSIBEL
     const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
-    const hasIntent = /(jual|ready|mahar)\s+(akun|ml|ff)/i.test(textMessage) || /^(jual|ready|mahar)/i.test(textMessage);
+    // Memperluas intent agar kata-kata gaul/bebas (seperti akun, ml, ff, di, allkosin, dll) ikut tertangkap
+    const hasIntent = /(jual|ready|mahar|allkosin|bisa|akun|ml|ff|di|caw)/i.test(textMessage) || hasPrice;
 
     if (hasPrice && hasIntent) {
         console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran. Menjalankan AI Extraction...');
