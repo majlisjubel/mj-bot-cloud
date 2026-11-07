@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Ubah arah path langsung ke root folder utama project
-const filePath = path.join(__dirname, '../candidates.json');
+// Sesuaikan path agar mengarah ke dalam folder data/candidates.json
+const filePath = path.join(__dirname, '../data/candidates.json');
 
 function initStorage() {
     const dir = path.dirname(filePath);
