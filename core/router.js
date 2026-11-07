@@ -7,6 +7,10 @@ const transactionSkill = require('../skills/transaction');
 const analyticsSkill = require('../skills/analytics');
 const adminSkill = require('../skills/admin');
 
+// 1. Tambahkan import Product Intelligence & Database Kandidat
+const { extractProductData } = require('../skills/productIntelligence');
+const { saveCandidate } = require('./database'); // sesuaikan path jika file database.js ada di folder core/
+
 async function handleMessage(sock, sender, textMessage, isMentioned = false) {
     const text = textMessage.toLowerCase();
     const isGroup = sender.endsWith('@g.us');
@@ -64,13 +68,26 @@ async function handleMessage(sock, sender, textMessage, isMentioned = false) {
         return;
     }
 
-    // 2. Integrasi Filter Produk (Project 5)
+    // 2. Integrasi Filter Produk & Product Intelligence (Project 6)
     const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
     const hasIntent = /(jual|ready|mahar)\s+(akun|ml|ff)/i.test(textMessage) || /^(jual|ready|mahar)/i.test(textMessage);
 
     if (hasPrice && hasIntent) {
-        console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran.');
-        await sock.sendMessage(sender, { text: 'Bot mendeteksi penawaran produk. Sedang diproses...' });
+        console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran. Menjalankan AI Extraction...');
+        
+        // Jalankan ekstraksi Groq AI
+        const analysis = await extractProductData(textMessage, sender);
+
+        if (analysis && analysis.isValidProduct) {
+            // Simpan otomatis ke kandidat lokal (aman tanpa sqlite native)
+            const savedItem = saveCandidate(analysis);
+            console.log('-> [SUCCESS] Kandidat produk tersimpan:', savedItem.nama_produk);
+            
+            // Berikan respons opsional (bisa dikondisikan agar bot tidak terlalu spam di grup)
+            await sock.sendMessage(sender, { text: `✅ Produk terdeteksi & masuk antrean kandidat: *${savedItem.nama_produk}* (Rp ${savedItem.harga})` });
+        } else {
+            console.log('-> [INFO] Filter keyword cocok, tapi AI menyatakan bukan produk valid.');
+        }
         return;
     }
 
