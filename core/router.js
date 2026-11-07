@@ -10,40 +10,39 @@ const adminSkill = require('../skills/admin');
 async function handleMessage(sock, sender, textMessage) {
     const text = textMessage.toLowerCase();
 
-    // 1. Cek Command Utama (Skills)
-    if (text.startsWith('katalog') || text.includes('menu produk')) {
+    // 1. Cek Command Utama (Skills) - Diperluas dengan .includes() agar lebih fleksibel
+    if (text.includes('katalog') || text.includes('catalog') || text.includes('menu produk')) {
         const reply = catalogSkill.execute();
         await sock.sendMessage(sender, { text: reply });
         return;
     }
-    if (text.startsWith('stok') || text.includes('cek stok')) {
+    if (text.includes('stok') || text.includes('stock') || text.includes('cek stok') || text.includes('sisa barang')) {
         const reply = stockSkill.execute(text);
         await sock.sendMessage(sender, { text: reply });
         return;
     }
-    if (text.startsWith('transaksi') || text.includes('beli')) {
+    if (text.includes('transaksi') || text.includes('beli') || text.includes('order') || text.includes('pesan')) {
         const reply = transactionSkill.execute(text);
         await sock.sendMessage(sender, { text: reply });
         return;
     }
-    if (text.startsWith('analytics') || text.startsWith('laporan')) {
+    if (text.includes('analytics') || text.includes('laporan') || text.includes('penjualan')) {
         const reply = analyticsSkill.execute();
         await sock.sendMessage(sender, { text: reply });
         return;
     }
-    if (text.startsWith('admin') || text.startsWith('panel')) {
+    if (text.includes('admin') || text.includes('panel')) {
         const reply = adminSkill.execute(sender);
         await sock.sendMessage(sender, { text: reply });
         return;
     }
 
-    // 2. Integrasi Filter Produk (Project 5 yang baru kita uji)
+    // 2. Integrasi Filter Produk (Project 5)
     const hasPrice = /(rp|rb|k|\d{4,})/i.test(textMessage);
     const hasIntent = /(jual|ready|mahar)\s+(akun|ml|ff)/i.test(textMessage) || /^(jual|ready|mahar)/i.test(textMessage);
 
     if (hasPrice && hasIntent) {
         console.log('-> [ROUTER] Terdeteksi pesan produk/penawaran.');
-        // Di sini nanti bisa diarahkan ke fungsi ekstraksi produk atau dibalas otomatis
         await sock.sendMessage(sender, { text: 'Bot mendeteksi penawaran produk. Sedang diproses...' });
         return;
     }
