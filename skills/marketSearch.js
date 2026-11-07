@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-// Path presisi: naik satu tingkat dari folder skills/ ke root project utama
-const CANDIDATES_FILE = path.join(__dirname, '../candidates.json');
+// Path presisi: mengarah ke dalam folder data/candidates.json
+const CANDIDATES_FILE = path.join(__dirname, '../data/candidates.json');
 
 function searchCandidates(query) {
   if (!fs.existsSync(CANDIDATES_FILE)) return [];
