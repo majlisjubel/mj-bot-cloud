@@ -4,41 +4,38 @@ const path = require('path');
 const CANDIDATES_FILE = path.join(__dirname, '../data/candidates.json');
 
 function searchCandidates(query) {
-  if (!fs.existsSync(CANDIDATES_FILE)) {
-    console.log('[DEBUG] File candidates.json tidak ditemukan di:', CANDIDATES_FILE);
-    return [];
-  }
+  if (!fs.existsSync(CANDIDATES_FILE)) return [];
   
   try {
     const rawData = fs.readFileSync(CANDIDATES_FILE, 'utf-8');
     const data = JSON.parse(rawData);
     
-    console.log(`[DEBUG] Total data di candidates.json: ${data.length} item`);
-    console.log(`[DEBUG] Query mentah pencarian: "${query}"`);
+    const rawQuery = query.toLowerCase().trim();
+    
+    // Daftar kata umum yang harus dibuang dari keyword pencarian
+    const stopwords = ['mj', 'cari', 'nyari', 'ada', 'yang', 'info', 'cek', 'harga', 'jual', 'beli', 'dong', 'sih', 'gak', 'kah'];
+    
+    // Pecah query dan saring hanya kata kunci inti (misal: '80k', 'ml', 'ff')
+    const keywords = rawQuery
+      .split(/\s+/)
+      .filter(word => word.length > 1 && !stopwords.includes(word));
 
-    const keyword = query.toLowerCase().trim();
-    if (!keyword) return data.slice(0, 5); // Kalau kosong, tampilkan 5 data teratas
+    console.log('[DEBUG MARKET] Keyword bersih:', keywords);
 
-    const keywords = keyword.split(/\s+/).filter(word => word.length > 0);
-    console.log('[DEBUG] Pecahan keyword:', keywords);
+    // Jika setelah disaring malah kosong total, kembalikan array kosong
+    if (keywords.length === 0) return [];
 
     const results = data.filter(item => {
-      // Gabungkan semua field penting dari data JSON
-      const name = (item.nama_produk || '').toLowerCase();
-      const price = (item.harga || '').toLowerCase();
-      const desc = (item.deskripsi || '').toLowerCase();
+      const targetString = `${item.nama_produk || ''} ${item.harga || ''} ${item.deskripsi || ''}`.toLowerCase();
       
-      const targetString = `${name} ${price} ${desc}`;
-      
-      // Cek apakah ada keyword yang cocok di dalam targetString
-      const isMatch = keywords.some(kw => targetString.includes(kw));
-      return isMatch;
+      // Syarat: Item harus mengandung SEMUA keyword inti yang dicari (biar spesifik dan akurat)
+      return keywords.every(kw => targetString.includes(kw));
     });
 
-    console.log(`[DEBUG] Hasil pencarian yang cocok: ${results.length} item`);
+    console.log(`[DEBUG MARKET] Hasil filter spesifik: ${results.length} item`);
     return results;
   } catch (error) {
-    console.error("[DEBUG] Gagal membaca/parsing candidates.json:", error.message);
+    console.error("[MARKET SEARCH ERROR]:", error.message);
     return [];
   }
 }
